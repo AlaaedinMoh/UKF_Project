@@ -63,6 +63,22 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
    * TODO: Complete this function! Make sure you switch between lidar and radar
    * measurements.
    */
+  switch (meas_package.sensor_type_)
+  {
+  case MeasurementPackage::SensorType::LASER:
+    use_laser_=true;
+    use_radar_=false;
+    break;
+  case MeasurementPackage::SensorType::RADAR:
+    use_laser_=false;
+    use_radar_=true;
+    break;
+  default:
+    use_laser_=false;
+    use_radar_=false;
+    std::cerr<<"Undefined Sensor Type...!"<<std::endl;
+    break;
+  }
 }
 
 void UKF::Prediction(double delta_t) {
