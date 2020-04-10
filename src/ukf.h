@@ -3,8 +3,24 @@
 
 #include "Eigen/Dense"
 #include "measurement_package.h"
+#include <iostream>
 
 class UKF {
+  private:
+  //intialize state vector and covariance matrix from radar measurments
+  void InitializeFromRadar(MeasurementPackage* rdr_meas_package);
+  //intialize state vector and covariance matrix from lidar measurments
+  void InitializeFromLidar(MeasurementPackage* ldr_meas_package);
+  //initialize noise matrix
+  void InitializeNoise();
+  void InitAugmentedStateVect(Eigen::VectorXd& x_aug);
+  void InitAugmentedCovarMat(Eigen::MatrixXd& p_aug);
+  void Init_X_sig_mat(Eigen::MatrixXd& Xsig_aug, const Eigen::VectorXd& x_aug, const Eigen::MatrixXd& sqrt_p_aug);
+  void DoPredictSigmaPoints(const Eigen::MatrixXd& xSigMat, double dt);
+  void PredictMeanAndCovar();
+  void PredictRadarMeasurements(Eigen::VectorXd& rdr_meas_p, Eigen::MatrixXd& rdr_cov_p);
+  void PredictLaserMeasurements(Eigen::VectorXd& lsr_meas_p, Eigen::MatrixXd& lsr_cov_p);
+  void CalculateCorrel_Mat(Eigen::MatrixXd& corrMat);
  public:
   /**
    * Constructor
@@ -91,10 +107,14 @@ class UKF {
   int n_x_;
 
   // Augmented state dimension
-  int n_aug_;
+  int n_a_;
 
   // Sigma point spreading parameter
   double lambda_;
+
+  Eigen::MatrixXd sig_noise_;
+
+  int n_noise_;
 };
 
 #endif  // UKF_H
