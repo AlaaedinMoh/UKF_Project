@@ -9,13 +9,13 @@ int main(int argc, const char* argv[])
 {
 	bool useLaser = true;
 	bool useRdr = true;
+	bool isOneStep = false;
 	std::vector<bool> showCars = {true, true, true};
 	if(argc > 1)
 	{
 		string argStr = argv[1];
 	    useLaser = argStr.compare("l")==0 || argStr.compare("lr")==0;	
 		useRdr = argStr.compare("r")==0 || argStr.compare("lr")==0;
-		cout<<"Args 2 = "<<argStr<<endl; 
 		if(argc > 2)
 		{
 			argStr = argv[2];
@@ -28,15 +28,20 @@ int main(int argc, const char* argv[])
 				{
 					argStr = argv[4];
 					showCars[2] = argStr.compare("t")==0;
+					if(argc > 5)
+					{
+						argStr = argv[5];
+						isOneStep = argStr.compare("-s")==0;
+					}
 				}
 			}
 		}
 	}
-	cout<<"Visualize Lidar = "<<std::to_string(useLaser)<<endl;
-	cout<<"Visualize Radar = "<<std::to_string(useRdr)<<endl;
-	cout<<"Show first car = "<<std::to_string(showCars[0])<<endl;
-	cout<<"Show second car = "<<std::to_string(showCars[1])<<endl;
-	cout<<"Show second car = "<<std::to_string(showCars[2])<<endl;
+	// cout<<"Visualize Lidar = "<<std::to_string(useLaser)<<endl;
+	// cout<<"Visualize Radar = "<<std::to_string(useRdr)<<endl;
+	// cout<<"Show first car = "<<std::to_string(showCars[0])<<endl;
+	// cout<<"Show second car = "<<std::to_string(showCars[1])<<endl;
+	// cout<<"Show second car = "<<std::to_string(showCars[2])<<endl;
 	pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
 	viewer->setBackgroundColor(0, 0, 0);
 
@@ -69,7 +74,9 @@ int main(int argc, const char* argv[])
 		viewer->spinOnce(1000/frame_per_sec);
 		frame_count++;
 		time_us = 1000000*frame_count/frame_per_sec;
-		
+		if(isOneStep)
+		{
+			std::cin.ignore(1);
+		}
 	}
-
 }

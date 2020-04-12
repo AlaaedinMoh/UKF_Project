@@ -4,6 +4,8 @@
 #include "Eigen/Dense"
 #include "measurement_package.h"
 #include <iostream>
+#include <fstream>
+#include <ios>
 
 class UKF {
   private:
@@ -18,9 +20,6 @@ class UKF {
   void Init_X_sig_mat(Eigen::MatrixXd& Xsig_aug, const Eigen::VectorXd& x_aug, const Eigen::MatrixXd& sqrt_p_aug);
   void DoPredictSigmaPoints(const Eigen::MatrixXd& xSigMat, double dt);
   void PredictMeanAndCovar();
-  void PredictRadarMeasurements(Eigen::VectorXd& rdr_meas_p, Eigen::MatrixXd& rdr_cov_p);
-  void PredictLaserMeasurements(Eigen::VectorXd& lsr_meas_p, Eigen::MatrixXd& lsr_cov_p);
-  void CalculateCorrel_Mat(Eigen::MatrixXd& corrMat);
  public:
   /**
    * Constructor

@@ -36,10 +36,10 @@ UKF::UKF() {
   P_ = MatrixXd(n_x_, n_x_);
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 30;
+  std_a_ = 3.0;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 30;
+  std_yawdd_ = 2.0;
 
   /**
    * DO NOT MODIFY measurement noise values below.
@@ -95,14 +95,12 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
           if(use_laser_)
           {
             InitializeFromLidar(&meas_package);
-            // cout<<"UKF initialized with Lidar\n";
           }
           break;
         case MeasurementPackage::SensorType::RADAR:
           if(use_radar_)
           {
             InitializeFromRadar(&meas_package);
-            // cout<<"UKF nitialized with\n";
           }
           break;
         default:
@@ -123,11 +121,9 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     {
       case MeasurementPackage::SensorType::LASER:
         UpdateLidar(meas_package);
-        // cout<<"Lidar Sensor\n";
         break;
       case MeasurementPackage::SensorType::RADAR:
         UpdateRadar(meas_package);
-        // cout<<"Radar Sensor\n";
         break;
     }
   }
@@ -143,7 +139,6 @@ void UKF::Prediction(double delta_t) {
    * Modify the state vector, x_. Predict sigma points, the state,
    * and the state covariance matrix.
    */
-  // cout<<"Predicting...\n";
   try
   {
     VectorXd x_a;
@@ -151,11 +146,9 @@ void UKF::Prediction(double delta_t) {
     InitAugmentedStateVect(x_a);
     InitAugmentedCovarMat(p_a);
     MatrixXd L = p_a.llt().matrixL();
-    MatrixXd Xsig_a;
-    // cout<<"sqrt P:\n"<<L<<endl;
-    // cout<<"Init Sigma Points"<<endl;
-    Init_X_sig_mat(Xsig_a, x_a, L);
-    DoPredictSigmaPoints(Xsig_a, delta_t);
+    MatrixXd xSig_a;
+    Init_X_sig_mat(xSig_a, x_a, L);
+    DoPredictSigmaPoints(xSig_a, delta_t);
     PredictMeanAndCovar();
   }
   catch(const std::exception& e)
@@ -181,40 +174,31 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
   l_mean_p.fill(0.0);
   l_cov_p.fill(0.0);
   corrMat.fill(0.0);
-  // cout<<"Calculating Lidar mean...\n";
   for(int i = 0; i < zSig_cols; ++i)
   {
-    // cout<<"Iteration : "<<i<<endl;
     zSig_pred.col(i) = Xsig_pred_.col(i).head(n_z);
-    // zSig_pred(1,i) = Xsig_pred_(,i);
-    // cout<<"Updating l_mean_p...\n";
     l_mean_p += weights_(i)*zSig_pred.col(i);
   }
-  // cout<<"Calculating Lidar covariance and correlation...\n";
   for(int i = 0; i < zSig_cols; ++i)
   {
     VectorXd zDiff = zSig_pred.col(i) - l_mean_p;
-    l_cov_p +=  weights_(i)*zDiff*zDiff.transpose();
+    Eigen::Transpose<VectorXd> zDiff_T = zDiff.transpose();
+    l_cov_p +=  weights_(i)*zDiff*zDiff_T;
     VectorXd xDiff = Xsig_pred_.col(i) - x_;
-    corrMat += weights_(i)*xDiff*zDiff.transpose();
+    while (xDiff(3) > M_PI) 
+      xDiff(3) -= 2. * M_PI;
+    while (xDiff(3) < -M_PI) 
+      xDiff(3) += 2. * M_PI;
+    corrMat += weights_(i)*xDiff*zDiff_T;
   }
-  // cout<<"Calculating Lidar noise...\n";
   MatrixXd R = MatrixXd(n_z,n_z);
   R.fill(0.0);
   R(0,0) = pow(std_laspx_,2);
   R(1,1) = pow(std_laspy_,2);
   l_cov_p += R;
-  // cout<<"Calculating Lidar filter gain...\n";
   MatrixXd kg = corrMat*l_cov_p.inverse();
-  // cout<<"Updating UKF...\n";
-  // cout<<"raw_measurements_ size = ["<<meas_package.raw_measurements_.size()<<"]"<<endl;
-  // cout<<"zSig_pred size = ["<<zSig_pred.rows()<<" x "<<zSig_pred.cols()<<"]"<<endl;
   VectorXd z_diff = meas_package.raw_measurements_ - l_mean_p;
-  // cout<<"kg size = ["<<kg.rows()<<" x "<<kg.cols()<<"]"<<endl;
-  // cout<<"z_diff size = ["<<z_diff.size()<<"]"<<endl;
-  // cout<<"Updating x_...\n";
   x_ += kg*z_diff;
-  // cout<<"Updating P_...\n";
   P_ -= kg*l_cov_p*kg.transpose();
 }
 
@@ -235,7 +219,6 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   r_mean_p.fill(0.0);
   r_cov_p.fill(0.0);
   corrMat.fill(0.0);
-  // cout<<"Calculating the zSig ...\n";
   for (size_t i = 0; i < zSig_cols; i++)
   {
     double px = Xsig_pred_(0,i);
@@ -245,36 +228,30 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 
     zSig_pred(0,i) = sqrt(px*px + py*py);
     zSig_pred(1,i) = atan2(py,px);
-    zSig_pred(2,i) = (px*cos(yaw)*v + py*sin(yaw)*v) / sqrt(px*px + py*py);
-  }
-  // cout<<"Calculating the r_mean...\n";
-  //Predicting the mean
-  for (size_t i = 0; i < zSig_cols; i++)
-  {
+    zSig_pred(2,i) = (px*cos(yaw)*v + py*sin(yaw)*v) / zSig_pred(0,i);
+
     r_mean_p += weights_(i)*zSig_pred.col(i);
   }
-  // cout<<"Calculating the covarianc and correlation...\n";
   //Predicting the covariance and correlation matrix
   for (size_t i = 0; i < zSig_cols; i++)
   {
     VectorXd zDiff = zSig_pred.col(i) - r_mean_p;
+    Eigen::Transpose<VectorXd> zDiff_T = zDiff.transpose();
     while (zDiff(1)> M_PI) zDiff(1)-=2.*M_PI;
     while (zDiff(1)<-M_PI) zDiff(1)+=2.*M_PI;
-    r_cov_p += weights_(i)*zDiff*zDiff.transpose();
+    r_cov_p += weights_(i)*zDiff*zDiff_T;
 
     VectorXd xDiff = Xsig_pred_.col(i) - x_;
-    while (xDiff(1)> M_PI) xDiff(1)-=2.*M_PI;
-    while (xDiff(1)<-M_PI) xDiff(1)+=2.*M_PI;
-    corrMat += weights_(i)*xDiff*zDiff.transpose();
+    while (xDiff(3)> M_PI) xDiff(3)-=2.*M_PI;
+    while (xDiff(3)<-M_PI) xDiff(3)+=2.*M_PI;
+    corrMat += weights_(i)*xDiff*zDiff_T;
   }
-  // cout<<"Calculating the noise...\n";
   MatrixXd R = MatrixXd(n_z,n_z);
   R.fill(0.0);
   R(0,0) = pow(std_radr_,2);
   R(1,1) = pow(std_radphi_,2);
   R(2,2) = pow(std_radrd_,2);
   r_cov_p += R;
-  // cout<<"Update UKF...\n";
   MatrixXd kg = corrMat*r_cov_p.inverse();
   VectorXd z_diff = meas_package.raw_measurements_ - r_mean_p;
   while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
@@ -293,26 +270,22 @@ void UKF::InitializeFromRadar(MeasurementPackage* rdr_meas_package){
   double vy = rhoDot*sin(phi);
   double v = sqrt(pow(vx,2)+pow(vy,2));
   x_<< px, py, v, rho, rhoDot;
-  // std::cout<<"Radar X:\n"<<x_<<std::endl;
   P_<<pow(std_radr_,2),0,0,0,0,
       0,pow(std_radr_,2),0,0,0,
       0, 0, pow(std_radrd_,2), 0, 0,
       0, 0, 0, std_radphi_, 0,
       0, 0, 0, 0, std_radphi_;
-  // std::cout<<"Radar P:\n"<<P_<<std::endl;
 }
 
 void UKF::InitializeFromLidar(MeasurementPackage* ldr_meas_package){
   double px = ldr_meas_package->raw_measurements_[0];
   double py = ldr_meas_package->raw_measurements_[1];
   x_<< px, py, 0, 0, 0;
-  // std::cout<<"Lidar X:\n"<<x_<<std::endl;
   P_<<pow(std_laspx_,2),0,0,0,0,
       0,pow(std_laspy_,2),0,0,0,
       0, 0, 1, 0, 0,
       0, 0, 0, 1, 0,
       0, 0, 0, 0, 1;
-  // std::cout<<"Lidar P:\n"<<P_<<std::endl;
 }
 
 void UKF::InitializeNoise(){
@@ -327,7 +300,6 @@ void UKF::InitAugmentedStateVect(VectorXd& x_aug){
   x_aug.head(n_x_) = x_;
   x_aug(5) = 0;
   x_aug(6) = 0;
-  // cout<<"X_Augmented:\n"<<x_aug<<endl;
 }
 
 void UKF::InitAugmentedCovarMat(MatrixXd& p_aug){
@@ -335,7 +307,6 @@ void UKF::InitAugmentedCovarMat(MatrixXd& p_aug){
   p_aug.fill(0.0);
   p_aug.topLeftCorner(n_x_,n_x_) = P_;
   p_aug.bottomRightCorner(2,2) = sig_noise_;
-  // cout<<"P_Augmented:\n"<<p_aug<<endl;
 }
 
 void UKF::Init_X_sig_mat(MatrixXd& Xsig_aug, const VectorXd& x_aug, const MatrixXd& sqrt_p_aug){
@@ -346,12 +317,12 @@ void UKF::Init_X_sig_mat(MatrixXd& Xsig_aug, const VectorXd& x_aug, const Matrix
     Xsig_aug.col(i+1)      = x_aug + sqrt(lambda_+n_a_)*sqrt_p_aug.col(i);
     Xsig_aug.col(i+1+n_a_) = x_aug - sqrt(lambda_+n_a_)*sqrt_p_aug.col(i);
   }
-  // cout<<"Sigma Points Matrix:\n"<<Xsig_aug<<endl;
 }
 
 void UKF::DoPredictSigmaPoints(const Eigen::MatrixXd& xSigMat, double dt){
-  double px, py, v, yaw, yawd, nu_a, nu_yawdd;
+  
   int cols = 2*n_a_ + 1;
+  double px, py, v, yaw, yawd, nu_a, nu_yawdd;
   for(int i = 0; i < cols; ++i)
   {
     //Getting variable for each calculated sigma point in each column
@@ -363,23 +334,25 @@ void UKF::DoPredictSigmaPoints(const Eigen::MatrixXd& xSigMat, double dt){
     nu_a = xSigMat(5, i);
     nu_yawdd = xSigMat(6, i);
     //defining and caclulating the predicted sigma points X(k+1|k)
-    double px_p, py_p, v_p;
+    double px_p, py_p, v_p, yaw_p, yawd_p;
+    double sin_yaw = sin(yaw);
+    double cos_yaw = cos(yaw);
     if(fabs(yawd)>0.001)
     {
-      px_p = px + (v/yawd)*(sin(yaw+yawd*dt) - sin(yaw));
-      py_p = py + (v/yawd)*(-cos(yaw + yawd*dt) + cos(yaw));
+      px_p = px + (v/yawd)*(sin(yaw + yawd*dt) - sin_yaw);
+      py_p = py + (v/yawd)*(-cos(yaw + yawd*dt) + cos_yaw);
     }
     else
     {
-      px_p = px + v*dt*cos(yaw);
-      py_p = py + v*dt*sin(yaw);
+      px_p = px + v*dt*cos_yaw;
+      py_p = py + v*dt*sin_yaw;
     }
     v_p = v;
-    double yaw_p = yaw + yaw*dt;
-    double yawd_p = yawd;
+    yaw_p = yaw + yawd*dt;
+    yawd_p = yawd;
     //Adding noise
-    px_p += 0.5*dt*dt*cos(yaw)*nu_a;
-    py_p += 0.5*dt*dt*sin(yaw)*nu_a;
+    px_p += 0.5*dt*dt*cos_yaw*nu_a;
+    py_p += 0.5*dt*dt*sin_yaw*nu_a;
     v_p += dt*nu_a;
     yaw_p += 0.5*dt*dt*nu_yawdd;
     yawd_p += dt*nu_yawdd;
@@ -390,20 +363,17 @@ void UKF::DoPredictSigmaPoints(const Eigen::MatrixXd& xSigMat, double dt){
     Xsig_pred_(3,i) = yaw_p;
     Xsig_pred_(4,i) = yawd_p;
   }
-  // cout<<"Predicting sigma points is finished\n";
 }
 
 void UKF::PredictMeanAndCovar(){
   x_.fill(0.0);
   P_.fill(0.0);
-  // cout<<"Predicting the mean and the covariance...\n";
-  // cout<<"Xsig_pred_ size = ["<<Xsig_pred_.rows()<<" x "<<Xsig_pred_.cols()<<"]"<<endl;
-  for(int i = 0; i < 2*n_a_ + 1; ++i)
+  int colsNum = 2*n_a_ + 1;
+  for(int i = 0; i < colsNum; ++i)
   {
     x_ += weights_(i)*Xsig_pred_.col(i);
   }
-  // cout<<"Predicting mean is finished...\n";
-  for(int i = 0; i < 2*n_a_ + 1; ++i)
+  for(int i = 0; i < colsNum; ++i)
   {
     VectorXd xDiff = Xsig_pred_.col(i) - x_;
     while(xDiff(3) > M_PI) xDiff(3) -= 2.*M_PI;
@@ -411,17 +381,4 @@ void UKF::PredictMeanAndCovar(){
 
     P_ += weights_(i)*xDiff*xDiff.transpose();
   }
-  // cout<<"Predicting covariance is finished...\n";
-}
-
-void UKF::PredictRadarMeasurements(Eigen::VectorXd& rdr_meas_p, Eigen::MatrixXd& rdr_cov_p){
-
-}
-
-void UKF::PredictLaserMeasurements(Eigen::VectorXd& lsr_meas_p, Eigen::MatrixXd& lsr_cov_p){
-
-}
-
-void UKF::CalculateCorrel_Mat(Eigen::MatrixXd& corrMat){
-
 }
